@@ -1,0 +1,1 @@
+Just a quick note about the graphics. I am not the author. I have used the beautiful sprites from a game called Christmas Daze. I found them on the http://www.spriters-resource.com/ site. They were ripped by a guy called redblueyellow. Cheers to him :)
