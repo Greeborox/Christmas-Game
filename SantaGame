@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Santa Game - www.jsdn.pl js.n00b</title>
+	<style>
+
+		canvas#game {
+			background-image: url(GFX/background.png);
+			border: 2px solid black;
+		}
+
+	</style>
+</head>
+<body onload="startSantaGame()">
+
+<canvas width="680px" height="600px" id="game"></canvas>
+
+<script type="text/javascript" src="JS/santa.js"></script>
+</body>
+</html>
