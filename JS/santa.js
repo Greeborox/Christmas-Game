@@ -54,8 +54,9 @@ var SantaGame = function(canvas) {
 			fps: 50,
 			width: canvas.width,
 			height: canvas.height,
+			score: 0,
 			presentsToMiss: 5,
-			presentsToCatch: 10,
+			giftsOnPlane: 5,
 			level: 1,
 			welcomePicSrc: "GFX/welcomeScreen.png",
 			welcomePicSrc2: "GFX/welcomeScreen2.png",
@@ -156,10 +157,13 @@ var SantaGame = function(canvas) {
 		this.santa;
 		this.hurtSanta;
 		this.plane;
+		this.giftsDropped = 0;
+		this.giftsLeftOnPlane;
 		this.presents = [];
 		this.exPresents = [];
 		this.bombs = [];
 		this.explosions = [];
+		this.speedAdj;
 		this.Santa = function() {
 			this.x = 10;
 			this.y = game.config.height-105;
@@ -275,10 +279,10 @@ var SantaGame = function(canvas) {
 				ctx.drawImage(this.image,this.size*this.currFrame,this.size*this.direction,this.size,this.size,this.x,this.y,this.size+45,this.size+45);
 			}
 		};
-		this.Present = function(x){
+		this.Present = function(x,speedMod){
 			this.x = x;
 			this.y = 80;
-			this.speed = 200;
+			this.speed = 200+speedMod;
 			this.width = 30;
 			this.height = 35;
 			this.currFrame = 0;
@@ -330,10 +334,10 @@ var SantaGame = function(canvas) {
 				ctx.drawImage(this.image,this.width*this.currFrame,0,this.width,this.height,this.x,this.y,this.width+20,this.height+20);
 			}
 		};
-		this.Bomb = function(x){
+		this.Bomb = function(x,speedMod){
 			this.x = x;
 			this.y = 80;
-			this.speed = 200;
+			this.speed = 200+speedMod;
 			this.size = 30;
 			this.currFrame = 0;
 			this.frameNum = 3;
@@ -385,6 +389,8 @@ var SantaGame = function(canvas) {
 			}
 		};
 		this.enter = function(){
+			this.speedAdj = game.config.level*10
+			this.giftsDropped = 0;
 			this.presents = [];
 			this.exPresents = [];
 			this.bombs = [];
@@ -396,6 +402,7 @@ var SantaGame = function(canvas) {
 		};
 		this.update = function(){
 			var giftChance;
+			this.giftsLeftOnPlane = game.config.giftsOnPlane - this.giftsDropped;
 			if(game.pressedKeys[39]) {
 				if(this.santa){
 					this.santa.moving = true;
@@ -446,9 +453,12 @@ var SantaGame = function(canvas) {
 			if(this.plane.dropReady){
 				giftChance = Math.random() * 9;
 				if(giftChance > 4 &&  giftChance <= 8) {
-					this.presents.push(new this.Present(this.plane.x+5));
+					if(this.giftsLeftOnPlane != 0){
+						this.presents.push(new this.Present(this.plane.x+5,this.speedAdj));
+						this.giftsDropped++;
+					}
 				} else if(giftChance <= 4){
-					this.bombs.push(new this.Bomb(this.plane.x+5))
+					this.bombs.push(new this.Bomb(this.plane.x+5,this.speedAdj))
 				}
 				this.plane.dropTick = Math.random() * 4;
 				this.plane.dropReady = false;
@@ -462,6 +472,11 @@ var SantaGame = function(canvas) {
 			}
 			if(game.config.presentsToMiss === 0) {
 				game.changeState(game.gameStates.overState);
+			}
+			if(this.giftsDropped === game.config.giftsOnPlane && this.presents.length === 0 && this.exPresents.length === 0) {
+				game.config.level++;
+				game.config.giftsOnPlane+=5;
+				game.changeState(game.gameStates.announceState);
 			}
 			if(this.santa){
 				this.checkCollisions();
@@ -489,9 +504,16 @@ var SantaGame = function(canvas) {
 				this.explosions[i].draw();
 			}
 			//draw UI
+			ctx.font="20px Arial";
+			ctx.fillStyle = '#ffffff';
+			ctx.textAlign = "left";
+			ctx.fillText("score: "+game.config.score, 10, 20);
+			ctx.fillText("level: "+game.config.level, 10, 38);
+			ctx.fillText("gifts on plane : "+this.giftsLeftOnPlane, 10, 56);
 			for(var i = 0; i<game.config.presentsToMiss; i++){
 				ctx.drawImage(this.preserntInstance.image,0,0,this.preserntInstance.width,this.preserntInstance.height,game.config.width-30-(16*i),5,15,15);
 			}
+
 		};
 		this.checkCollisions = function(){
 			santa = this.santa;
@@ -500,7 +522,8 @@ var SantaGame = function(canvas) {
 				if(present.x >= santa.x && present.x <= santa.x+santa.width){
 					if(present.y >= santa.y && present.y <= santa.y+santa.height) {
 						this.presents.splice(i,1);
-						//dodaj punkty
+						game.config.score += 1;
+						this.giftsCaught += 1;
 					}
 				}
 			}
@@ -525,6 +548,12 @@ var SantaGame = function(canvas) {
 		this.tick = 0.4;
 		this.timer = 0;
 		this.flag = "on";
+		this.enter = function() {
+			game.config.presentsToMiss = 5;
+			game.config.score = 0;
+			game.config.level = 1;
+			game.config.giftsOnPlane = 5;
+		}
 		this.draw = function(){
 			ctx.clearRect(0,0, game.config.width, game.config.height);
 			if(this.flag==="on"){
@@ -558,11 +587,11 @@ var SantaGame = function(canvas) {
 		this.draw = function() {
 			ctx.clearRect(0,0, game.config.width, game.config.height);
 			ctx.drawImage(this.loadScreen, 80, (canvas.height/2)-100)
-			ctx.font="30px Arial";
+			ctx.font="50px Impact";
 			ctx.fillStyle = '#ffffff';
 	    ctx.textBaseline="center";
 	    ctx.textAlign="center";
-	    ctx.fillText("1", game.config.width / 2, game.config.height/2);
+	    ctx.fillText(game.config.level, game.config.width / 2, game.config.height/2+20);
 		};
 		this.update = function() {
 			if(this.timer >= this.displayTime) {
