@@ -13,6 +13,8 @@ var SantaGame = function(canvas) {
 		this.game = new this.GameEngine(this.canvas, this.gameLoop, this.gameStates);
 		this.gameStates.menuState = new this.MenuState(this.game);
 		this.gameStates.gameState = new this.GameState(this.game);
+		this.gameStates.overState = new this.GameOver(this.game);
+		this.gameStates.announceState = new this.LevelAnnouncement(this.game)
 		this.activateKeyboard();
 		this.game.start();
 	};
@@ -52,14 +54,20 @@ var SantaGame = function(canvas) {
 			fps: 50,
 			width: canvas.width,
 			height: canvas.height,
+			presentsToMiss: 5,
+			presentsToCatch: 10,
+			level: 1,
 			welcomePicSrc: "GFX/welcomeScreen.png",
+			welcomePicSrc2: "GFX/welcomeScreen2.png",
 			santaImage: "GFX/santa.png",
 			toyPlaneImg: "GFX/plane.png",
 			presentImg: "GFX/gift.png",
 			exPresentImg: "GFX/exGift.png",
 			bombImg: "GFX/bomb.png",
 			explosionImg: "GFX/explosion.png",
-			hurtSantaImg: "GFX/hurtSanta.png"
+			hurtSantaImg: "GFX/hurtSanta.png",
+			overPicSrc: "GFX/gameOver.png",
+			loadPicSrc: "GFX/loading.png"
 		};
 		this.returnState = function() {
 			if(this.stateStack.length < 0) {
@@ -110,21 +118,44 @@ var SantaGame = function(canvas) {
 		var ctx = game.gameBoard.getContext("2d");
 		this.welcomeScreen = new Image();
 		this.welcomeScreen.src = game.config.welcomePicSrc;
+		this.welcomeScreen2 = new Image();
+		this.welcomeScreen2.src = game.config.welcomePicSrc2;
+		this.image;
+		this.tick = 0.4;
+		this.timer = 0;
+		this.flag = "on";
 		this.draw = function(){
 			ctx.clearRect(0,0, game.config.width, game.config.height);
-			ctx.drawImage(this.welcomeScreen, 25, (canvas.height/2)-180)
+			ctx.drawImage(this.image, 25, (canvas.height/2)-180)
 		};
 		this.keyDown = function(key){
 			if(key === 32 ){ // Spacja
-				console.log("spacja")
-				game.changeState(game.gameStates.gameState);
-			} 
+				game.changeState(game.gameStates.announceState);
+			}
+		};
+		this.update = function(){
+			if(this.flag === "on"){
+				this.image = this.welcomeScreen;
+			} else {
+				this.image = this.welcomeScreen2;
+			}
+			if(this.timer >= this.tick){
+				if(this.flag === "on") {
+					this.flag = "off";
+				} else {
+					this.flag = "on";
+				}
+				this.timer = 0;
+			} else {
+				this.timer += 1/(game.config.fps);
+			}
 		};
 	};
 	this.GameState = function(game){
 		var ctx = game.gameBoard.getContext("2d");
 		this.santa;
 		this.hurtSanta;
+		this.plane;
 		this.presents = [];
 		this.exPresents = [];
 		this.bombs = [];
@@ -179,7 +210,7 @@ var SantaGame = function(canvas) {
 				if(this.ticks > this.frameTick) {
 					this.currFrame++;
 					if(this.currFrame === this.frameNum) {
-						this.destoryed = true;
+						this.destroyed = true;
 					}
 					this.ticks=0;
 				} else {
@@ -202,6 +233,9 @@ var SantaGame = function(canvas) {
 			this.direction = 0;
 			this.image = new Image();
 			this.image.src = game.config.toyPlaneImg;
+			this.dropTimer = 0;
+			this.dropTick;
+			this.dropReady = false;
 			this.update = function(){
 				if(this.ticks > this.frameTick) {
 					this.currFrame++;
@@ -225,14 +259,25 @@ var SantaGame = function(canvas) {
 						this.direction = 0;
 					}
 				}
+				if(this.dropTick){
+						this.checkDrops();
+				}
 			};
+			this.checkDrops = function() {
+				if(this.dropTimer >= this.dropTick){
+					this.dropReady = true;
+					this.dropTimer = 0;
+				} else {
+					this.dropTimer += 1/(game.config.fps);
+				}
+			}
 			this.draw = function(){
 				ctx.drawImage(this.image,this.size*this.currFrame,this.size*this.direction,this.size,this.size,this.x,this.y,this.size+45,this.size+45);
 			}
 		};
 		this.Present = function(x){
 			this.x = x;
-			this.y = 105;
+			this.y = 80;
 			this.speed = 200;
 			this.width = 30;
 			this.height = 35;
@@ -274,7 +319,7 @@ var SantaGame = function(canvas) {
 				if(this.ticks > this.frameTick) {
 					this.currFrame++;
 					if(this.currFrame === this.frameNum) {
-						this.destoryed = true;
+						this.destroyed = true;
 					}
 					this.ticks=0;
 				} else {
@@ -287,7 +332,7 @@ var SantaGame = function(canvas) {
 		};
 		this.Bomb = function(x){
 			this.x = x;
-			this.y = 105;
+			this.y = 80;
 			this.speed = 200;
 			this.size = 30;
 			this.currFrame = 0;
@@ -328,7 +373,7 @@ var SantaGame = function(canvas) {
 				if(this.ticks > this.frameTick) {
 					this.currFrame++;
 					if(this.currFrame === this.frameNum) {
-						this.destoryed = true;
+						this.destroyed = true;
 					}
 					this.ticks=0;
 				} else {
@@ -340,22 +385,32 @@ var SantaGame = function(canvas) {
 			}
 		};
 		this.enter = function(){
+			this.presents = [];
+			this.exPresents = [];
+			this.bombs = [];
+			this.explosions = [];
 			this.santa = new this.Santa();
 			this.plane = new this.ToyPlane();
-			this.bombs.push(new this.Bomb(game.config.width/2));
+			this.preserntInstance = new this.Present(1000);
+			this.plane.dropTick = Math.random() * 2;
 		};
 		this.update = function(){
+			var giftChance;
 			if(game.pressedKeys[39]) {
-				this.santa.moving = true;
-				this.santa.direction = 0;
-				if(this.santa.x<game.config.width-this.santa.width-55)
-				this.santa.x += this.santa.speed*(1/game.config.fps);
+				if(this.santa){
+					this.santa.moving = true;
+					this.santa.direction = 0;
+					if(this.santa.x<game.config.width-this.santa.width-55)
+					this.santa.x += this.santa.speed*(1/game.config.fps);
+				}
 			}
 			if(game.pressedKeys[37]) {
-				this.santa.moving = true;
-				this.santa.direction = 1
-				if(this.santa.x>=10)
-				this.santa.x -= this.santa.speed*(1/game.config.fps);
+				if(this.santa){
+					this.santa.moving = true;
+					this.santa.direction = 1
+					if(this.santa.x>=10)
+					this.santa.x -= this.santa.speed*(1/game.config.fps);
+				}
 			}
 			if(this.santa){
 				this.santa.update();
@@ -372,6 +427,7 @@ var SantaGame = function(canvas) {
 				this.exPresents[i].update();
 				if(this.exPresents[i].destroyed) {
 					this.exPresents.splice(i,1);
+					game.config.presentsToMiss--;
 				}
 			}
 			for(var i = 0; i<this.bombs.length;i++){
@@ -387,13 +443,27 @@ var SantaGame = function(canvas) {
 					this.explosions.splice(i,1);
 				}
 			}
+			if(this.plane.dropReady){
+				giftChance = Math.random() * 9;
+				if(giftChance > 4 &&  giftChance <= 8) {
+					this.presents.push(new this.Present(this.plane.x+5));
+				} else if(giftChance <= 4){
+					this.bombs.push(new this.Bomb(this.plane.x+5))
+				}
+				this.plane.dropTick = Math.random() * 4;
+				this.plane.dropReady = false;
+			}
 			if(this.hurtSanta){
 				this.hurtSanta.update();
 				if(this.hurtSanta.destroyed) {
 					this.hurtSanta = null;
+					game.changeState(game.gameStates.overState);
 				}
 			}
-			if(this.santa){	
+			if(game.config.presentsToMiss === 0) {
+				game.changeState(game.gameStates.overState);
+			}
+			if(this.santa){
 				this.checkCollisions();
 			}
 		};
@@ -418,6 +488,10 @@ var SantaGame = function(canvas) {
 			for(var i = 0; i<this.explosions.length;i++){
 				this.explosions[i].draw();
 			}
+			//draw UI
+			for(var i = 0; i<game.config.presentsToMiss; i++){
+				ctx.drawImage(this.preserntInstance.image,0,0,this.preserntInstance.width,this.preserntInstance.height,game.config.width-30-(16*i),5,15,15);
+			}
 		};
 		this.checkCollisions = function(){
 			santa = this.santa;
@@ -439,7 +513,66 @@ var SantaGame = function(canvas) {
 			}
 		}
 		this.keyUp = function(){
-			this.santa.moving = false;
+			if(this.santa){
+				this.santa.moving = false;
+			}
 		};
 	};
+	this.GameOver = function(game){
+		var ctx = game.gameBoard.getContext("2d");
+		this.overScreen = new Image();
+		this.overScreen.src = game.config.overPicSrc;
+		this.tick = 0.4;
+		this.timer = 0;
+		this.flag = "on";
+		this.draw = function(){
+			ctx.clearRect(0,0, game.config.width, game.config.height);
+			if(this.flag==="on"){
+				ctx.drawImage(this.overScreen, 120, (canvas.height/2)-180)
+			}
+		};
+		this.keyDown = function(key){
+			if(key === 32 ){ // Spacja
+				game.changeState(game.gameStates.menuState);
+			}
+		};
+		this.update = function(){
+			if(this.timer >= this.tick){
+				if(this.flag === "on") {
+					this.flag = "off";
+				} else {
+					this.flag = "on";
+				}
+				this.timer = 0;
+			} else {
+				this.timer += 1/(game.config.fps);
+			}
+		};
+	};
+	this.LevelAnnouncement = function(game){
+		var ctx = game.gameBoard.getContext("2d");
+		this.loadScreen = new Image();
+		this.loadScreen.src = game.config.loadPicSrc;
+		this.displayTime = 1.2;
+		this.timer = 0;
+		this.draw = function() {
+			ctx.clearRect(0,0, game.config.width, game.config.height);
+			ctx.drawImage(this.loadScreen, 80, (canvas.height/2)-100)
+			ctx.font="30px Arial";
+			ctx.fillStyle = '#ffffff';
+	    ctx.textBaseline="center";
+	    ctx.textAlign="center";
+	    ctx.fillText("1", game.config.width / 2, game.config.height/2);
+		};
+		this.update = function() {
+			if(this.timer >= this.displayTime) {
+				game.changeState(game.gameStates.gameState);
+			} else {
+				this.timer += 1/game.config.fps;
+			}
+		};
+		this.enter = function() {
+			this.timer = 0;
+		};
+	}
 };
